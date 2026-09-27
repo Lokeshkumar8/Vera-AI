@@ -235,11 +235,24 @@ def compose(category: dict, merchant: dict, trigger: dict, customer: dict | None
     if customer is not None and kind == "customer_lapsed_hard":
         cname = _name_for_customer(customer)
         days = p.get("days_since_last_visit")
-        focus = p.get("previous_focus")
+        focus = p.get("previous_focus") or "previous"
         gym_offer = _offer(merchant, "Trial") or offer
-        out["body"] = f"Hi {cname} 👋 {owner} from {mname} here. It’s been {days} days — no pressure. We can pick up your {focus.replace('_', ' ')} goal with {gym_offer or 'a trial session'}. Want me to hold a trial spot?"
+
+        days_text = f"{days} days" if days is not None else "a little while"
+        focus_text = str(focus).replace("_", " ")
+
+        out["body"] = (
+            f"Hi {cname} 👋 {owner} from {mname} here. "
+            f"It’s been {days_text} — no pressure. "
+            f"We can pick up your {focus_text} goal with "
+            f"{gym_offer or 'a trial session'}. "
+            f"Want me to hold a trial spot?"
+        )
         out["cta"] = "binary_yes_no"
-        out["rationale"] = "Hard-lapse winback; non-judgmental language, prior goal and current offer are grounded in the supplied contexts."
+        out["rationale"] = (
+            "Hard-lapse winback; non-judgmental language, prior goal and "
+            "current offer are grounded in the supplied contexts."
+        ) 
         return out
 
     if customer is not None and kind == "wedding_package_followup":
