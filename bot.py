@@ -252,7 +252,7 @@ def compose(category: dict, merchant: dict, trigger: dict, customer: dict | None
         out["rationale"] = (
             "Hard-lapse winback; non-judgmental language, prior goal and "
             "current offer are grounded in the supplied contexts."
-        ) 
+        )
         return out
 
     if customer is not None and kind == "wedding_package_followup":
@@ -324,7 +324,26 @@ def compose(category: dict, merchant: dict, trigger: dict, customer: dict | None
         if comp:
             body = f"{owner}, {comp} opened {dist} km away with {their}. Your current profile is at {perf.get('ctr', 0)*100:.1f}% CTR versus the category benchmark {category.get('peer_stats', {}).get('avg_ctr', 0)*100:.1f}%. I’d tighten the listing before changing price. Want me to draft the first 3 listing changes?"
         else:
-            body = f"{owner}, a new nearby competitor signal is in your feed. Your current CTR is {perf.get('ctr', 0)*100:.1f}%. Want me to turn the signal into three concrete listing actions?"
+            ctr = perf.get("ctr")
+            offer_text = _offer(merchant)
+
+            ctr_text = (
+                f" Your current CTR is {float(ctr) * 100:.1f}%."
+                if ctr is not None
+                else ""
+            )
+
+            offer_part = (
+                f" Your active offer is {offer_text}."
+                if offer_text
+                else ""
+            )
+
+            body = (
+                f"{owner}, there’s new nearby competitor activity on your listing."
+                f"{ctr_text}{offer_part} "
+                f"Want me to draft the first 3 listing changes?"
+            )
         out["body"] = body; out["cta"] = "binary_yes_no"
         out["rationale"] = "Competitive trigger combined with the merchant's actual CTR and category benchmark; recommends improving the listing before price changes."
         return out
@@ -388,12 +407,38 @@ def compose(category: dict, merchant: dict, trigger: dict, customer: dict | None
         return out
 
     if kind == "milestone_reached":
-        value = p.get("value_now"); milestone = p.get("milestone_value")
+        value = p.get("value_now")
+        milestone = p.get("milestone_value")
+        metric = p.get("metric", "profile milestone")
+
         if value is not None and milestone is not None:
-            body = f"{owner}, you’re at {value} reviews — only {max(0, milestone-value)} short of the {milestone} milestone. Want me to draft a simple review-request message for recent customers?"
+            remaining = max(0, float(milestone) - float(value))
+
+            if metric == "review_count":
+                metric_text = "reviews"
+            else:
+                metric_text = str(metric).replace("_", " ")
+
+            body = (
+                f"{owner}, you’re at {value} {metric_text} — "
+                f"only {remaining:g} short of the {milestone} milestone. "
+                f"Want me to draft a simple customer ask to help you reach it?"
+            )
         else:
-            body = f"{owner}, you’re close to a meaningful profile milestone. Want me to draft a low-friction customer ask to help you reach it?"
-        out["body"] = body; out["cta"] = "binary_yes_no"; out["rationale"] = "Milestone trigger uses the exact supplied progress where available and proposes one concrete next action."
+            metric_text = "your next review" if metric == "review_count" else str(metric).replace("_", " ")
+            body = (
+                f"{owner}, you’re approaching {metric_text} milestone. "
+                f"I can turn it into one simple customer-facing ask. "
+                f"Want me to draft it?"
+            )
+
+        out["body"] = body
+        out["cta"] = "binary_yes_no"
+        out["rationale"] = (
+            "Milestone trigger uses exact progress when supplied; when "
+            "progress fields are missing, it avoids inventing numbers while "
+            "still naming the supplied metric and giving one concrete action."
+        )
         return out
 
     if kind == "gbp_unverified":
@@ -404,8 +449,32 @@ def compose(category: dict, merchant: dict, trigger: dict, customer: dict | None
 
     if kind == "dormant_with_vera":
         days = p.get("days_since_last_merchant_message")
-        out["body"] = f"{owner}, it’s been {days} days since we last worked on {p.get('last_topic', 'your profile')}. I found a concrete next step from your current merchant data — want me to surface it in one message?"
-        out["cta"] = "binary_yes_no"; out["rationale"] = "Dormancy trigger; acknowledges the elapsed time and offers one specific next step without flooding the merchant."
+        topic = p.get("last_topic")
+
+        topic_labels = {
+            "subscription_expiry": "your subscription",
+            "profile_update": "your profile",
+            "offer_setup": "your offer setup",
+            "campaign": "your campaign",
+        }
+
+        topic_text = topic_labels.get(
+            str(topic).lower() if topic else "",
+            "your profile"
+        )
+
+        days_text = f"{days} days" if days is not None else "a little while"
+
+        out["body"] = (
+            f"{owner}, it’s been {days_text} since we last worked on "
+            f"{topic_text}. I found a concrete next step from your current "
+            f"merchant data — want me to surface it in one message?"
+        )
+        out["cta"] = "binary_yes_no"
+        out["rationale"] = (
+            "Dormancy trigger; elapsed time and prior topic are translated "
+            "into natural merchant-facing language, with a single low-friction next step."
+        )
         return out
 
     if kind == "category_seasonal":
